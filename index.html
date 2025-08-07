@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แบบฟอร์มเช็คอิน</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .container {
+            max-width: 900px;
+        }
+        .app-container {
+            background: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            font-weight: 500;
+            color: #4b5563;
+        }
+        input[type="text"], input[type="time"], input[type="number"], textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid #d1d5db;
+            background-color: #f9fafb;
+            transition: all 0.2s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-primary {
+            background-color: #3b82f6;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.4);
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        .btn-secondary {
+            background-color: #e5e7eb;
+            color: #4b5563;
+        }
+        .btn-secondary:hover {
+            background-color: #d1d5db;
+        }
+        .summary-item {
+            padding: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+        .summary-item h3 {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .summary-item span {
+            color: #4b5563;
+        }
+        .loading-indicator {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #messageBox {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            color: white;
+            z-index: 1000;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        #messageBox.success { background-color: #10b981; }
+        #messageBox.error { background-color: #ef4444; }
+        .user-id-container {
+            background-color: #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: #4b5563;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body class="p-6">
+
+<div id="app" class="container mx-auto app-container p-8">
+    <!-- UI for Firestore status -->
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-800">ระบบเช็คอิน</h1>
+        <div id="authStatus" class="flex items-center space-x-2 text-sm text-gray-500">
+            <div id="loadingSpinner" class="animate-spin h-5 w-5 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+            <span>กำลังเชื่อมต่อ...</span>
+        </div>
+    </div>
+    
+    <!-- User ID display -->
+    <div class="mb-6">
+        <p class="text-sm text-gray-500 mb-2">รหัสผู้ใช้งาน (userId) สำหรับการเก็บข้อมูล:</p>
+        <div id="userIdDisplay" class="user-id-container"></div>
+    </div>
+    
+    <!-- Navigation Buttons -->
+    <div class="flex justify-center space-x-4 mb-6">
+        <button id="showFormBtn" class="btn btn-primary">เช็คอินใหม่</button>
+        <button id="showListBtn" class="btn btn-secondary">ดูข้อมูลทั้งหมด</button>
+    </div>
+    
+    <!-- Check-in Form -->
+    <div id="formContainer" class="hidden">
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">แบบฟอร์มเช็คอินใหม่</h2>
+        
+        <form id="checkinForm" class="space-y-6">
+            <div class="input-group">
+                <label for="guestName" class="block mb-2">ชื่อผู้เข้าพัก</label>
+                <input type="text" id="guestName" name="guestName" required>
+            </div>
+            <div class="input-group">
+                <label for="bookingName" class="block mb-2">จองในนาม</label>
+                <input type="text" id="bookingName" name="bookingName" required>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div class="input-group">
+                    <label for="checkinTime" class="block mb-2">เช็คอินเวลา</label>
+                    <input type="time" id="checkinTime" name="checkinTime" required>
+                </div>
+                <div class="input-group">
+                    <label for="roomNumber" class="block mb-2">ห้องพักเลขที่</label>
+                    <input type="text" id="roomNumber" name="roomNumber" required>
+                </div>
+            </div>
+            <div class="input-group">
+                <label for="breakfastTime" class="block mb-2">เวลาอาหารเช้า (ถ้ามี)</label>
+                <input type="time" id="breakfastTime" name="breakfastTime">
+            </div>
+            <hr class="border-t border-gray-200 my-6">
+            <div class="input-group">
+                <label for="totalAmount" class="block mb-2">ยอดรวม</label>
+                <input type="number" id="totalAmount" name="totalAmount" step="0.01" required>
+            </div>
+            <div class="input-group">
+                <label class="block mb-2">ยอดชำระ ณ วันเช็คอิน</label>
+                <div class="flex items-center space-x-4">
+                    <input type="number" id="paidTransfer" name="paidTransfer" class="w-1/2" placeholder="โอน จำนวน..." step="0.01">
+                    <input type="number" id="paidCash" name="paidCash" class="w-1/2" placeholder="เงินสด จำนวน..." step="0.01">
+                </div>
+            </div>
+            <div class="input-group">
+                <label class="block mb-2">ยอดมัดจำกุญแจ</label>
+                <div class="flex items-center space-x-4">
+                    <input type="number" id="depositTransfer" name="depositTransfer" class="w-1/2" placeholder="โอน จำนวน..." step="0.01">
+                    <input type="number" id="depositCash" name="depositCash" class="w-1/2" placeholder="เงินสด จำนวน..." step="0.01">
+                </div>
+            </div>
+            <div class="input-group">
+                <label for="notes" class="block mb-2">หมายเหตุ</label>
+                <textarea id="notes" name="notes" rows="3"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="photoFile" class="block mb-2">แนบรูปภาพ</label>
+                <input type="file" id="photoFile" name="photoFile" accept="image/*" class="w-full text-gray-500">
+            </div>
+            <button type="submit" id="submitBtn" class="btn btn-primary w-full mt-4">
+                <span id="submitText">บันทึกข้อมูล</span>
+                <span id="submitLoading" class="loading-indicator hidden"></span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Check-in List -->
+    <div id="listContainer" class="hidden">
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">รายการเช็คอินทั้งหมด</h2>
+        <div id="checkinList" class="space-y-4">
+            <!-- Check-in items will be rendered here -->
+            <div class="text-center text-gray-500 py-8" id="emptyState">ไม่มีข้อมูลเช็คอินที่บันทึกไว้</div>
+        </div>
+    </div>
+</div>
+
+<!-- Message Box -->
+<div id="messageBox"></div>
+
+<script type="module">
+    // Firebase SDKs
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global variables for Firebase
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    let db;
+    let auth;
+    let userId;
+
+    const formContainer = document.getElementById('formContainer');
+    const listContainer = document.getElementById('listContainer');
+    const showFormBtn = document.getElementById('showFormBtn');
+    const showListBtn = document.getElementById('showListBtn');
+    const checkinForm = document.getElementById('checkinForm');
+    const checkinList = document.getElementById('checkinList');
+    const userIdDisplay = document.getElementById('userIdDisplay');
+    const authStatus = document.getElementById('authStatus');
+    const emptyState = document.getElementById('emptyState');
+    const messageBox = document.getElementById('messageBox');
+    const submitBtn = document.getElementById('submitBtn');
+    const submitText = document.getElementById('submitText');
+    const submitLoading = document.getElementById('submitLoading');
+
+    // --- Firebase Initialization and Authentication ---
+    const app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // User is signed in.
+            userId = user.uid;
+            userIdDisplay.textContent = userId;
+            authStatus.innerHTML = `<span class="text-green-600">เชื่อมต่อแล้ว</span>`;
+            
+            // Show the form by default
+            showForm();
+
+            // Setup real-time listener for checkins
+            setupRealtimeListener();
+        } else {
+            // User is signed out.
+            authStatus.innerHTML = `<span class="text-red-600">กำลังเชื่อมต่อ...</span>`;
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Firebase Auth Error:", error);
+                authStatus.innerHTML = `<span class="text-red-600">การเชื่อมต่อล้มเหลว</span>`;
+            }
+        }
+    });
+
+    // --- UI State Management ---
+    function showForm() {
+        formContainer.classList.remove('hidden');
+        listContainer.classList.add('hidden');
+        showFormBtn.classList.remove('btn-secondary');
+        showFormBtn.classList.add('btn-primary');
+        showListBtn.classList.remove('btn-primary');
+        showListBtn.classList.add('btn-secondary');
+    }
+
+    function showList() {
+        formContainer.classList.add('hidden');
+        listContainer.classList.remove('hidden');
+        showFormBtn.classList.remove('btn-primary');
+        showFormBtn.classList.add('btn-secondary');
+        showListBtn.classList.remove('btn-secondary');
+        showListBtn.classList.add('btn-primary');
+    }
+
+    showFormBtn.addEventListener('click', showForm);
+    showListBtn.addEventListener('click', showList);
+
+    // --- Data Submission and Real-time Updates ---
+    async function saveCheckin(formData) {
+        if (!userId) {
+            showMessage("ไม่สามารถบันทึกได้: ผู้ใช้งานยังไม่ได้รับการรับรอง", "error");
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitText.classList.add('hidden');
+        submitLoading.classList.remove('hidden');
+
+        try {
+            // Define the collection path for public data
+            const collectionPath = `/artifacts/${appId}/public/data/checkins`;
+            const docRef = await addDoc(collection(db, collectionPath), {
+                ...formData,
+                timestamp: Date.now()
+            });
+            console.log("Document written with ID: ", docRef.id);
+            showMessage("บันทึกข้อมูลเรียบร้อยแล้ว!", "success");
+            checkinForm.reset();
+            
+        } catch (e) {
+            console.error("Error adding document: ", e);
+            showMessage("เกิดข้อผิดพลาดในการบันทึกข้อมูล", "error");
+        } finally {
+            submitBtn.disabled = false;
+            submitText.classList.remove('hidden');
+            submitLoading.classList.add('hidden');
+        }
+    }
+
+    checkinForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = {
+            guestName: document.getElementById('guestName').value,
+            bookingName: document.getElementById('bookingName').value,
+            checkinTime: document.getElementById('checkinTime').value,
+            roomNumber: document.getElementById('roomNumber').value,
+            breakfastTime: document.getElementById('breakfastTime').value || null,
+            totalAmount: parseFloat(document.getElementById('totalAmount').value) || 0,
+            paidTransfer: parseFloat(document.getElementById('paidTransfer').value) || 0,
+            paidCash: parseFloat(document.getElementById('paidCash').value) || 0,
+            depositTransfer: parseFloat(document.getElementById('depositTransfer').value) || 0,
+            depositCash: parseFloat(document.getElementById('depositCash').value) || 0,
+            notes: document.getElementById('notes').value || null,
+            photoUrl: null
+        };
+        
+        const photoFile = document.getElementById('photoFile').files[0];
+        if (photoFile) {
+            // Convert image to base64 string for storage
+            const reader = new FileReader();
+            reader.onloadend = async function() {
+                formData.photoUrl = reader.result;
+                await saveCheckin(formData);
+            };
+            reader.readAsDataURL(photoFile);
+        } else {
+            await saveCheckin(formData);
+        }
+    });
+
+    function setupRealtimeListener() {
+        if (!userId) return;
+
+        const collectionPath = `/artifacts/${appId}/public/data/checkins`;
+        const q = query(collection(db, collectionPath));
+        
+        onSnapshot(q, (querySnapshot) => {
+            const checkins = [];
+            querySnapshot.forEach((doc) => {
+                checkins.push({ id: doc.id, ...doc.data() });
+            });
+
+            renderCheckinList(checkins);
+        });
+    }
+
+    function renderCheckinList(data) {
+        checkinList.innerHTML = ''; // Clear previous data
+        if (data.length === 0) {
+            emptyState.classList.remove('hidden');
+        } else {
+            emptyState.classList.add('hidden');
+            // Sort data by timestamp in descending order (newest first)
+            data.sort((a, b) => b.timestamp - a.timestamp);
+            data.forEach(item => {
+                const totalPaid = (item.paidTransfer + item.paidCash).toFixed(2);
+                const totalDeposit = (item.depositTransfer + item.depositCash).toFixed(2);
+                const itemHtml = `
+                    <div class="summary-item bg-gray-50 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between shadow-sm">
+                        <div class="flex-grow">
+                            <h3 class="text-lg text-blue-600"><strong>ชื่อ:</strong> ${item.guestName}</h3>
+                            <p class="text-sm text-gray-600"><strong>ห้อง:</strong> ${item.roomNumber} &bull; <strong>เวลา:</strong> ${item.checkinTime}</p>
+                        </div>
+                        <div class="mt-2 sm:mt-0 text-sm text-right sm:text-left">
+                            <p><strong>ยอดชำระ:</strong> ${totalPaid} บาท</p>
+                            <p><strong>มัดจำ:</strong> ${totalDeposit} บาท</p>
+                        </div>
+                    </div>
+                `;
+                checkinList.innerHTML += itemHtml;
+            });
+        }
+    }
+
+    // --- Utility Functions ---
+    function showMessage(message, type) {
+        messageBox.textContent = message;
+        messageBox.className = '';
+        messageBox.classList.add(type);
+        messageBox.classList.add('messageBox');
+        messageBox.style.display = 'block';
+        setTimeout(() => {
+            messageBox.style.opacity = '1';
+        }, 10);
+        setTimeout(() => {
+            messageBox.style.opacity = '0';
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, 500);
+        }, 3000);
+    }
+</script>
+</body>
+</html>
