@@ -230,6 +230,7 @@
     let db;
     let auth;
     let userId;
+    let retryDelay = 1000; // Initial retry delay in milliseconds
 
     const formContainer = document.getElementById('formContainer');
     const listContainer = document.getElementById('listContainer');
@@ -245,10 +246,28 @@
     const submitText = document.getElementById('submitText');
     const submitLoading = document.getElementById('submitLoading');
 
-    // --- Firebase Initialization and Authentication ---
+    // --- Firebase Initialization and Authentication with Exponential Backoff ---
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    
+    async function authenticate() {
+        try {
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+            // Reset retry delay on successful connection
+            retryDelay = 1000; 
+        } catch (error) {
+            console.error("Firebase Auth Error:", error);
+            // Implement exponential backoff for retries
+            retryDelay = Math.min(retryDelay * 2, 60000); // Max delay of 60 seconds
+            authStatus.innerHTML = `<span class="text-yellow-600">การเชื่อมต่อล้มเหลว กำลังลองใหม่ใน ${retryDelay / 1000} วินาที...</span>`;
+            setTimeout(authenticate, retryDelay);
+        }
+    }
 
     onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -263,18 +282,9 @@
             // Setup real-time listener for checkins
             setupRealtimeListener();
         } else {
-            // User is signed out.
+            // User is signed out. Attempt to authenticate.
             authStatus.innerHTML = `<span class="text-red-600">กำลังเชื่อมต่อ...</span>`;
-            try {
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Firebase Auth Error:", error);
-                authStatus.innerHTML = `<span class="text-red-600">การเชื่อมต่อล้มเหลว</span>`;
-            }
+            authenticate();
         }
     });
 
@@ -345,86 +355,4 @@
             paidTransfer: parseFloat(document.getElementById('paidTransfer').value) || 0,
             paidCash: parseFloat(document.getElementById('paidCash').value) || 0,
             depositTransfer: parseFloat(document.getElementById('depositTransfer').value) || 0,
-            depositCash: parseFloat(document.getElementById('depositCash').value) || 0,
-            notes: document.getElementById('notes').value || null,
-            photoUrl: null
-        };
-        
-        const photoFile = document.getElementById('photoFile').files[0];
-        if (photoFile) {
-            // Convert image to base64 string for storage
-            const reader = new FileReader();
-            reader.onloadend = async function() {
-                formData.photoUrl = reader.result;
-                await saveCheckin(formData);
-            };
-            reader.readAsDataURL(photoFile);
-        } else {
-            await saveCheckin(formData);
-        }
-    });
-
-    function setupRealtimeListener() {
-        if (!userId) return;
-
-        const collectionPath = `/artifacts/${appId}/public/data/checkins`;
-        const q = query(collection(db, collectionPath));
-        
-        onSnapshot(q, (querySnapshot) => {
-            const checkins = [];
-            querySnapshot.forEach((doc) => {
-                checkins.push({ id: doc.id, ...doc.data() });
-            });
-
-            renderCheckinList(checkins);
-        });
-    }
-
-    function renderCheckinList(data) {
-        checkinList.innerHTML = ''; // Clear previous data
-        if (data.length === 0) {
-            emptyState.classList.remove('hidden');
-        } else {
-            emptyState.classList.add('hidden');
-            // Sort data by timestamp in descending order (newest first)
-            data.sort((a, b) => b.timestamp - a.timestamp);
-            data.forEach(item => {
-                const totalPaid = (item.paidTransfer + item.paidCash).toFixed(2);
-                const totalDeposit = (item.depositTransfer + item.depositCash).toFixed(2);
-                const itemHtml = `
-                    <div class="summary-item bg-gray-50 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between shadow-sm">
-                        <div class="flex-grow">
-                            <h3 class="text-lg text-blue-600"><strong>ชื่อ:</strong> ${item.guestName}</h3>
-                            <p class="text-sm text-gray-600"><strong>ห้อง:</strong> ${item.roomNumber} &bull; <strong>เวลา:</strong> ${item.checkinTime}</p>
-                        </div>
-                        <div class="mt-2 sm:mt-0 text-sm text-right sm:text-left">
-                            <p><strong>ยอดชำระ:</strong> ${totalPaid} บาท</p>
-                            <p><strong>มัดจำ:</strong> ${totalDeposit} บาท</p>
-                        </div>
-                    </div>
-                `;
-                checkinList.innerHTML += itemHtml;
-            });
-        }
-    }
-
-    // --- Utility Functions ---
-    function showMessage(message, type) {
-        messageBox.textContent = message;
-        messageBox.className = '';
-        messageBox.classList.add(type);
-        messageBox.classList.add('messageBox');
-        messageBox.style.display = 'block';
-        setTimeout(() => {
-            messageBox.style.opacity = '1';
-        }, 10);
-        setTimeout(() => {
-            messageBox.style.opacity = '0';
-            setTimeout(() => {
-                messageBox.style.display = 'none';
-            }, 500);
-        }, 3000);
-    }
-</script>
-</body>
-</html>
+            depositCash: parseFloat(docum
